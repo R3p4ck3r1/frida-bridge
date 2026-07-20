@@ -53,7 +53,7 @@ All files live under `<getFilesDir()>/R3p4ck3r/`:
 | `R3p4ck3r.cfg` | Bridge config — currently supports `delay=<seconds>` |
 
 **Automatic path resolution**  
-Whatever you put in the config’s `"path"` field (absolute, relative, real, or logical), the bridge will fix it at runtime. It copies the script file into the real gadget directory and rewrites the `"path"` to the bare filename `libfrida-gadget.script.so`. This guarantees the gadget can always find the script, even when the filesystem is remapped by a container.
+Whatever you put in the config’s `"path"` field (absolute, relative, real, or logical), the bridge will fix it at runtime. It copies the script file into the real gadget directory and rewrites the `"path"` to the bare filename `libR3p4ck3r.scr.so`. This guarantees the gadget can always find the script, even when the filesystem is remapped by a container.
 
 ---
 
