@@ -33,8 +33,8 @@ Just two steps, you can make any container/virtual space Frida‑mode supported.
 >- Implement the bridge library inside the container  
 >  See [Implementation Instructions](https://github.com/muhammadrizwan87/frida-bridge#-implementation-instructions)  
 >- Clone the original target app inside the container  
->- Create frida folder inside the target app's private files directory (`<getFilesDir()>/frida`).  
->  Real path syntax: `/data/data/<container_pkg>/<rootfs>/data/user/<user_id>/<target_pkg>/files/frida`.  
+>- Create frida folder inside the target app's private files directory (`<getFilesDir()>/R3p4ck3r`).  
+>  Real path syntax: `/data/data/<container_pkg>/<rootfs>/data/user/<user_id>/<target_pkg>/files/R3p4ck3r`.  
 >  You can access this location via the container's rootfs.  
 >- Place gadget files in the frida folder.  
 >- Run the target app inside the container.
@@ -43,14 +43,14 @@ Just two steps, you can make any container/virtual space Frida‑mode supported.
 
 ## 📁 2. Gadget Files & Directory Layout
 
-All files live under `<getFilesDir()>/frida/`:
+All files live under `<getFilesDir()>/R3p4ck3r/`:
 
 | File | Purpose |
 |---|---|
-| `libfrida-gadget.so` | Frida Gadget shared library (you supply this) |
-| `libfrida-gadget.config.so` | Gadget config JSON — auto-managed by the bridge |
-| `libfrida-gadget.script.so` | Compiled JS agent (you supply this, for script mode) |
-| `frida-bridge.cfg` | Bridge config — currently supports `delay=<seconds>` |
+| `libR3p4ck3r.so` | Frida Gadget shared library (you supply this) |
+| `libR3p4ck3r.cfg.so` | Gadget config JSON — auto-managed by the bridge |
+| `libR3p4ck3r.scr.so` | Compiled JS agent (you supply this, for script mode) |
+| `R3p4ck3r.cfg` | Bridge config — currently supports `delay=<seconds>` |
 
 **Automatic path resolution**  
 Whatever you put in the config’s `"path"` field (absolute, relative, real, or logical), the bridge will fix it at runtime. It copies the script file into the real gadget directory and rewrites the `"path"` to the bare filename `libfrida-gadget.script.so`. This guarantees the gadget can always find the script, even when the filesystem is remapped by a container.
@@ -59,7 +59,7 @@ Whatever you put in the config’s `"path"` field (absolute, relative, real, or 
 
 ## ⏱️ 3. Delay Configuration
 
-Create `frida-bridge.cfg` in the same `frida/` directory:
+Create `R3p4ck3r.cfg` in the same `R3p4ck3r/` directory:
 
 ```
 delay=3
