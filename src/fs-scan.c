@@ -34,14 +34,11 @@
 #include <linux/limits.h>
 
 #include "debug-logging.h"
+#include "frida-bridge.h"
 
 /* Bounds to keep the scan fast and safe even on a cluttered real filesystem. */
 #define FS_SCAN_MAX_DEPTH   10
 #define FS_SCAN_MAX_VISITED 20000
-
-/* GADGET_SUBDIR is "frida" (see frida-bridge.h); duplicated here as a
- * string literal to keep this module independently testable. */
-#define PAYLOAD_DIR_NAME "frida"
 
 struct scan_state {
   char   found_files_dir[PATH_MAX];
@@ -80,18 +77,33 @@ static void scan_dir_recursive(const char *dir, int depth, struct scan_state *st
 
     st->visited++;
 
-    /* Is this child itself the payload marker, and is its parent named
-     * "files" (i.e. this looks like <...>/files/frida)? */
-    if (strcmp(de->d_name, PAYLOAD_DIR_NAME) == 0) {
+    /* Is this child itself the payload marker directory (GADGET_SUBDIR),
+     * with its parent named "files" (i.e. this looks like
+     * <...>/files/<GADGET_SUBDIR>) -- AND does it actually contain the
+     * configured gadget library file? A directory match alone isn't
+     * enough: a stale/leftover subdirectory from a previous config (e.g.
+     * left over after renaming GADGET_SUBDIR/GADGET_LIB_NAME) must never
+     * be mistaken for a valid target. */
+    if (strcmp(de->d_name, GADGET_SUBDIR) == 0) {
       const char *base = strrchr(dir, '/');
       base = base ? base + 1 : dir;
       if (strcmp(base, "files") == 0) {
-        strncpy(st->found_files_dir, dir, sizeof(st->found_files_dir) - 1);
-        st->found_files_dir[sizeof(st->found_files_dir) - 1] = '\0';
-        st->found = 1;
-        LOGI("scan_dir_recursive: payload found under '%s'", dir);
-        closedir(dp);
-        return;
+        char gadget_path[PATH_MAX];
+        struct stat gadget_st;
+        int n2 = snprintf(gadget_path, sizeof(gadget_path), "%s/%s",
+                           child, GADGET_LIB_NAME);
+        if (n2 > 0 && (size_t)n2 < sizeof(gadget_path) &&
+            stat(gadget_path, &gadget_st) == 0 && S_ISREG(gadget_st.st_mode)) {
+          strncpy(st->found_files_dir, dir, sizeof(st->found_files_dir) - 1);
+          st->found_files_dir[sizeof(st->found_files_dir) - 1] = '\0';
+          st->found = 1;
+          LOGI("scan_dir_recursive: payload found under '%s'", dir);
+          closedir(dp);
+          return;
+        } else {
+          LOGD("scan_dir_recursive: '%s' exists but gadget file missing, "
+               "skipping stale/incomplete candidate", child);
+        }
       }
     }
 

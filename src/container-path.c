@@ -17,6 +17,7 @@
 #include <linux/limits.h>
 
 #include "debug-logging.h"
+#include "frida-bridge.h"
 
 /* ═══════════════════════════════════════════════════════════════════════════
  * Real Path Resolution
@@ -220,18 +221,24 @@ void read_package_name(char *buf, size_t sz) {
 /**
  * is_target_app_ready - Check if a candidate Application has the expected payload.
  *
- * The definitive marker for a valid target is the presence of the gadget
- * subdirectory (GADGET_SUBDIR) in the candidate's files directory.
- * If absent, this is not the intended target for gadget injection.
+ * The definitive marker for a valid target is the presence of the actual
+ * gadget library file (GADGET_LIB_NAME) inside the gadget subdirectory
+ * (GADGET_SUBDIR) in the candidate's files directory. Both names are
+ * read from frida-bridge.h so renaming them (e.g. to avoid signature-based
+ * detection) only requires editing that one header.
+ *
+ * We deliberately check for the gadget *file*, not just the subdirectory:
+ * a stale/leftover subdirectory from a previous config (e.g. left over
+ * after renaming GADGET_SUBDIR) must never be mistaken for a valid target.
  *
  * This approach is package-agnostic: it does not hardcode package names or
- * rely on application order. The user explicitly deploys the frida/
- * subdirectory only in the target app's files directory, making it the
- * definitive marker of a valid target.
+ * rely on application order. The user explicitly deploys the gadget
+ * subdirectory only in the target app's files directory, making the
+ * gadget file's presence the definitive marker of a valid target.
  *
  * @files_dir:  Path to the candidate application's files directory.
- * @return:     1 if payload subdirectory is present and is a directory,
- *              0 if absent or not a directory.
+ * @return:     1 if the gadget file is present as a regular file,
+ *              0 if absent or of the wrong type.
  */
 int is_target_app_ready(const char *files_dir) {
   if (!files_dir) return 0;
@@ -239,10 +246,11 @@ int is_target_app_ready(const char *files_dir) {
   char probe_path[PATH_MAX];
   struct stat st;
 
-  snprintf(probe_path, sizeof(probe_path), "%s/frida", files_dir);
-  int exists = (stat(probe_path, &st) == 0 && S_ISDIR(st.st_mode));
+  snprintf(probe_path, sizeof(probe_path), "%s/%s/%s",
+           files_dir, GADGET_SUBDIR, GADGET_LIB_NAME);
+  int exists = (stat(probe_path, &st) == 0 && S_ISREG(st.st_mode));
 
-  LOGD("is_target_app_ready: checking '%s' -> %s", files_dir, 
+  LOGD("is_target_app_ready: checking '%s' -> %s", probe_path,
        exists ? "PAYLOAD_FOUND" : "NO_PAYLOAD");
 
   return exists;
