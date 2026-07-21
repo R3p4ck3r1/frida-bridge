@@ -55,32 +55,54 @@ static void on_fork_parent(void) {
 /**
  * on_fork_child - Called in child process after fork().
  *
- * Resets bridge state and respawns the worker thread.
+ * Resets bridge state ONLY. Deliberately does NOT spawn a new worker
+ * thread here.
+ *
+ * WHY NOT RESPAWN DIRECTLY HERE:
+ * Calling ensure_bridge_started() (which calls pthread_create(), and
+ * transitively bridge_thread()'s malloc-using calls: snprintf, fopen,
+ * opendir/readdir, etc.) directly inside a pthread_atfork "child" handler
+ * is a well-known deadlock hazard. fork() only duplicates the calling
+ * thread; if some OTHER thread in the parent held an internal libc/
+ * malloc-arena/dynamic-linker lock at the exact instant of fork(), that
+ * lock is copied into the child already locked, with no thread left
+ * alive to ever unlock it. The moment this handler (or anything it
+ * calls) touches malloc(), the single surviving thread in the child
+ * hangs forever.
+ *
+ * This is especially dangerous because our library is loaded process-
+ * wide, so pthread_atfork() fires for EVERY fork() call anywhere in the
+ * process -- including forks made by completely unrelated subsystems
+ * (e.g. a crash-monitoring/watchdog library forking its own helper
+ * process), not just app-cloning forks. A hang in one of those unrelated
+ * forked children can manifest as an ANR / service-execution timeout
+ * elsewhere in the app, with no obvious link back to this library.
+ *
+ * Respawning is instead left entirely to JNI_OnLoad(), which already
+ * detects a new/changed JavaVM per cloned app instance (confirmed by
+ * "JavaVM changed" log lines occurring once per clone) and calls
+ * ensure_bridge_started() from a normal JNI callback context -- safe,
+ * because it is not running inside fork()'s lock-inheritance danger
+ * zone.
  *
  * In the child process:
  *   - The worker thread from the parent is GONE (threads don't survive fork).
  *   - The atomic flags from parent are inherited as stale values.
- *   - The JavaVM pointer (g_jvm) is still valid (inherited memory).
- *   - The mutex is in an undefined state and must be unlocked in child.
- *
- * Actions:
- *   1. Reset g_bridge_started to allow worker to start fresh.
- *   2. Unlock the mutex (in child init state).
- *   3. Call ensure_bridge_started() to spawn a new worker for the child.
+ *   - The JavaVM pointer (g_jvm) is still valid (inherited memory), but a
+ *     new one will be delivered via JNI_OnLoad if/when this child becomes
+ *     a real, distinct Android app process.
+ *   - The mutex is in an undefined lock state and must be unlocked here.
  *
  * Called automatically by pthread_atfork().
  */
 static void on_fork_child(void) {
-  LOGD("on_fork_child: child process post-fork, resetting bridge state");
-  
-  /* Reset the started flag so the worker can spawn in the child. */
+  /* Reset the started flag so a future, safely-triggered spawn can proceed. */
   g_bridge_started = 0;
-  
-  /* Unlock the mutex (it's in unknown state post-fork; this initializes it). */
+
+  /* Unlock the mutex (it's in unknown state post-fork; this initializes it).
+   * pthread_mutex_unlock() on our own never-contended-in-child mutex is the
+   * only operation performed here -- deliberately nothing else. */
   pthread_mutex_unlock(&g_bridge_lock);
-  
-  /* Respawn the worker thread in the child process. */
-  ensure_bridge_started();
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
